@@ -1,4 +1,3 @@
-# import time
 import numpy as np
 import pandas as pd
 import json
@@ -8,46 +7,44 @@ import boto3
 import s3fs
 import sagemaker
 from sagemaker.tuner import IntegerParameter, CategoricalParameter, ContinuousParameter, HyperparameterTuner
+
 # from sagemaker import get_execution_role
 np.random.seed(0)
 
-
 # set aws parameters
-aws_access_key_id = 'AKIA3ZMS56MGEGYFJDSD'
-aws_secret_access_key = 'xrzElsUwxCrYsAF6ogZ03/a9TNZlFs5cRpN54zse'
+aws_access_key_id = 'your_access_key_id'
+aws_secret_access_key = 'your_secret_access_key'
 region_name = 'cn-northwest-1'
-role = 'arn:aws-cn:iam::810446353164:role/service-role/AmazonSageMaker-ExecutionRole-20200814T152597'
+role = 'your_role'
 sagemaker_session = sagemaker.Session(boto3.session.Session(profile_name='default'))
-bucket = 'sagemaker-cn-northwest-1-810446353164'
+bucket = 'your_bucket'
 prefix = 'sagemaker/zc/DEMO-deepar'
 s3_data_path = "{}/{}/data".format(bucket, prefix)
 s3_output_path = "{}/{}/output".format(bucket, prefix)
 image_name = sagemaker.image_uris.retrieve(framework='forecasting-deepar', region=region_name, version='1')
 
-
 # set data and model parameters
 freq = 'D'
-prediction_length = 24
-context_length = 24*2
+prediction_length = 28
+context_length = 28 * 2
 t0 = '2020-01-01'
-data_length = 24*20
-num_ts = 4*1
-period = 24
-
+data_length = 365 * 3
+num_ts = 4 * 1
+period = 365
 
 # generate training and testing data
 time_series = []
 for k in range(num_ts):
     level = 10 * np.random.rand()
-    seas_amplitude = (0.1 + 0.3*np.random.rand()) * level
+    seas_amplitude = (0.1 + 0.3 * np.random.rand()) * level
     sig = 0.05 * level  # noise parameter (constant in time)
     time_ticks = np.array(range(data_length))
-    source = level + seas_amplitude*np.sin(time_ticks*(2*np.pi)/period)
-    noise = sig*np.random.randn(data_length)
+    source = level + seas_amplitude * np.sin(time_ticks * (2 * np.pi) / period)
+    noise = sig * np.random.randn(data_length)
     data = source + noise
     index = pd.date_range(t0, periods=data_length, freq='D')
     time_series.append(pd.Series(data=data, index=index))
-time_series[num_ts-1].plot()
+time_series[num_ts - 1].plot()
 plt.show()
 
 time_series_training = []
@@ -65,23 +62,25 @@ def series_to_obj(ts, cat=None):
     if cat is not None:
         obj["cat"] = cat
     return obj
+
+
 def series_to_jsonline(ts, cat=None):
     return json.dumps(series_to_obj(ts, cat))
 
+
 # upload data to s3
 encoding = "utf-8"
-s3filesystem = s3fs.S3FileSystem(key=aws_access_key_id, secret=aws_secret_access_key)  # region_name=region_name
-with s3filesystem.open(s3_data_path + "/train/train-400.json", 'wb') as fp:
+s3filesystem = s3fs.S3FileSystem(key=aws_access_key_id, secret=aws_secret_access_key)
+with s3filesystem.open(s3_data_path + "/train/train-4.json", 'wb') as fp:
     for ts in time_series_training:
         fp.write(series_to_jsonline(ts).encode(encoding))
         fp.write('\n'.encode(encoding))
-with s3filesystem.open(s3_data_path + "/test/test-400.json", 'wb') as fp:
+with s3filesystem.open(s3_data_path + "/test/test-4.json", 'wb') as fp:
     for ts in time_series:
         fp.write(series_to_jsonline(ts).encode(encoding))
         fp.write('\n'.encode(encoding))
 
-
-training_type = 'hypers_tuning'  # normal_training or hypers_tuning
+training_type = 'normal_training'  # normal_training or hypers_tuning
 
 # normal training, no hypers tuning
 if training_type == 'normal_training':
@@ -93,16 +92,19 @@ if training_type == 'normal_training':
         instance_type='ml.m5.xlarge',
         max_run=3600,
         use_spot_instances=True,
-        max_wait=3600,  # MaxWaitTimeInSeconds(i.e. max_wait) above 3600 is not supported for the given algorithm, and It must be present and be greater than or equal to MaxRuntimeInSeconds(i.e. max_run).
+        max_wait=3600,
+        # MaxWaitTimeInSeconds(i.e. max_wait) above 3600 is not supported for the given algorithm,
+        # and It must be present and be greater than or equal to MaxRuntimeInSeconds(i.e. max_run).
         base_job_name='DEMO-deepar-synthetic-zc',  # 不能用下划线_
         output_path="s3://" + s3_output_path,
-        tags=[{'Key':'app', 'Value':'sagemaker-deepar-demo-test'},
-              {'Key':'env', 'Value':'test'},
-              {'Key':'name', 'Value':'synthetic-data'},
-              {'Key':'depart', 'Value':'rd7'},
-              {'Key':'manage', 'Value':'zhangchi'},
-              {'Key':'input data', 'Value':'train-400.json'},
-              {'Key':'instance type / workers / parallel / count', 'Value':'ml.m5.xlarge / 4 / 1 / 1'}])  # tags中不能出现中英文逗号
+        tags=[{'Key': 'app', 'Value': 'sagemaker-deepar-demo-test'},
+              {'Key': 'env', 'Value': 'test'},
+              {'Key': 'name', 'Value': 'synthetic-data'},
+              {'Key': 'depart', 'Value': 'rd7'},
+              {'Key': 'manage', 'Value': 'zhangchi'},
+              {'Key': 'input data', 'Value': 'train-4.json'},
+              {'Key': 'instance type / workers / parallel / count',
+               'Value': 'ml.m5.xlarge / 4 / 1 / 1'}])  # tags中不能出现中英文逗号
     hyperparameters = {
         "time_freq": freq,
         "context_length": str(context_length),
@@ -114,13 +116,11 @@ if training_type == 'normal_training':
         "learning_rate": "0.001",
         "dropout_rate": "0.1",
         "early_stopping_patience": "10",
-        'likelihood': 'gaussian'
-                    }
+        'likelihood': 'gaussian'}
     estimator.set_hyperparameters(**hyperparameters)
     data_channels = {
-                    "train": "s3://{}/train/train-400.json".format(s3_data_path),
-                    "test": "s3://{}/test/test-400.json".format(s3_data_path)
-                    }
+        "train": "s3://{}/train/train-4.json".format(s3_data_path),
+        "test": "s3://{}/test/test-4.json".format(s3_data_path)}
     estimator.fit(inputs=data_channels, wait=True)
     # deploy endpoint using training model
     job_name = estimator.latest_training_job.name
@@ -131,7 +131,8 @@ if training_type == 'normal_training':
         image_uri=image_name,
         role=role,
         wait=True,
-        name=job_name)  # name 必须与 job_name一致，否则会报"ValueError: Shape of passed values is (28, 9), indices imply (24, 9)"的错误，括号内数字可能不同。
+        name=job_name)
+    # name必须与job_name一致，否则会报"ValueError: Shape of passed values is (28, 9), indices imply (24, 9)"的错误，括号内数字可能不同。
 
 # hypers tuning
 elif training_type == 'hypers_tuning':
@@ -146,7 +147,7 @@ elif training_type == 'hypers_tuning':
         max_wait=3600,
         base_job_name='DEMO-deepar-synthetic-zc',
         output_path="s3://" + s3_output_path,
-        hyperparameters = {
+        hyperparameters={
             "time_freq": freq,
             "context_length": str(context_length),
             "prediction_length": str(prediction_length),
@@ -158,43 +159,47 @@ elif training_type == 'hypers_tuning':
             "dropout_rate": "0.05",
             "early_stopping_patience": "10",
             'likelihood': 'gaussian'},
-        tags=[{'Key':'app', 'Value':'sagemaker-deepar-demo-test'},
-              {'Key':'env', 'Value':'test'},
-              {'Key':'name', 'Value':'synthetic-data/hyperparameters-tuning'},
-              {'Key':'depart', 'Value':'rd7'},
-              {'Key':'manage', 'Value':'zhangchi'},
-              {'Key':'input data', 'Value':'train-400.json'},
-              {'Key':'instance type / workers / parallel / count', 'Value':'ml.m5.xlarge / 4 / 1 / 1'},
-              {'Key':'hypers choice', 'Value':'likelihood: deterministic-L1 / student-T'}])  # tags中不能出现中英文逗号
+        tags=[{'Key': 'app', 'Value': 'sagemaker-deepar-demo-test'},
+              {'Key': 'env', 'Value': 'test'},
+              {'Key': 'name', 'Value': 'synthetic-data/hyperparameters-tuning'},
+              {'Key': 'depart', 'Value': 'rd7'},
+              {'Key': 'manage', 'Value': 'zhangchi'},
+              {'Key': 'input data', 'Value': 'train-4.json'},
+              {'Key': 'instance type / workers / parallel / count', 'Value': 'ml.m5.xlarge / 4 / 1 / 1'},
+              {'Key': 'hypers choice', 'Value': 'likelihood: deterministic-L1 / student-T'}])  # tags中不能出现中英文逗号
 
-    hyperparameter_ranges = {'likelihood' : CategoricalParameter(["deterministic-L1",'student-T'])}
+    hyperparameter_ranges = {'likelihood': CategoricalParameter(["deterministic-L1", 'student-T'])}
     objective_metric_name = 'test:mean_wQuantileLoss'
-    tuner = HyperparameterTuner(estimator_hyper,
-                                objective_metric_name,
-                                hyperparameter_ranges,
-                                strategy='Bayesian',
-                                objective_type='Minimize',
-                                max_jobs=1,
-                                max_parallel_jobs=1,
-                                tags=[{'Key':'app', 'Value':'sagemaker-deepar-demo-test'},
-                                      {'Key':'env', 'Value':'test'},
-                                      {'Key':'name', 'Value':'synthetic-data/hyperparameters-tuning'},
-                                      {'Key':'depart', 'Value':'rd7'},
-                                      {'Key':'manage', 'Value':'zhangchi'},
-                                      {'Key':'input data', 'Value':'train-400.json'},
-                                      {'Key':'instance type / workers / parallel / count', 'Value':'ml.m5.xlarge / 4 / 1 / 1'},
-                                      {'Key':'hypers choice', 'Value':'likelihood: deterministic-L1 / student-T'}]
-                               )
+    tuner = HyperparameterTuner(
+        estimator_hyper,
+        objective_metric_name,
+        hyperparameter_ranges,
+        strategy='Bayesian',
+        objective_type='Minimize',
+        max_jobs=1,
+        max_parallel_jobs=1,
+        tags=[{'Key': 'app', 'Value': 'sagemaker-deepar-demo-test'},
+              {'Key': 'env', 'Value': 'test'},
+              {'Key': 'name', 'Value': 'synthetic-data/hyperparameters-tuning'},
+              {'Key': 'depart', 'Value': 'rd7'},
+              {'Key': 'manage', 'Value': 'zhangchi'},
+              {'Key': 'input data', 'Value': 'train-4.json'},
+              {'Key': 'instance type / workers / parallel / count',
+               'Value': 'ml.m5.xlarge / 4 / 1 / 1'},
+              {'Key': 'hypers choice', 'Value': 'likelihood: deterministic-L1 / student-T'}])
     data_channels = {
-        "train": "s3://{}/train/train-400.json".format(s3_data_path),
-        "test": "s3://{}/test/test-400.json".format(s3_data_path)}
+        "train": "s3://{}/train/train-4.json".format(s3_data_path),
+        "test": "s3://{}/test/test-4.json".format(s3_data_path)}
     tuner.fit(inputs=data_channels, wait=True)
     # tuner.fit(inputs=data_channels, wait=False)
     # boto3.client('sagemaker').describe_hyper_parameter_tuning_job(
     #                             HyperParameterTuningJobName=tuner.latest_tuning_job.job_name)
 
     # deploy endpoint using training model
-    job_name = tuner.best_training_job()  # 此处不能用tuner.latest_tuning_job.job_name，否则得到的不是job_name，而是Hyperparameter tuning jobs的name，会比job_name差几个最后的字符，就会报"botocore.exceptions.ClientError: An error occurred (ValidationException) when calling the DescribeTrainingJob operation: Requested resource not found."的错误。
+    job_name = tuner.best_training_job()  # 此处不能用tuner.latest_tuning_job.job_name，
+    # 否则得到的不是job_name，而是Hyperparameter tuning jobs的name，会比job_name差几个最后的字符， 就会报"botocore.exceptions.ClientError: An
+    # error occurred (ValidationException) when calling the DescribeTrainingJob operation: Requested resource not
+    # found."的错误。
     endpoint_name = sagemaker_session.endpoint_from_job(
         job_name=job_name,
         initial_instance_count=1,
@@ -202,7 +207,8 @@ elif training_type == 'hypers_tuning':
         image_uri=image_name,
         role=role,
         wait=True,
-        name=job_name)  # name 必须与 job_name一致，否则会报"ValueError: Shape of passed values is (28, 9), indices imply (24, 9)"的错误，括号内数字可能不同。
+        name=job_name)  # name 必须与 job_name一致，否则会报"ValueError: Shape of passed values is (28, 9), indices imply (24,
+    # 9)"的错误，括号内数字可能不同。
 
 else:
     print('\'training_type\' must be one of \'normal_training\' or \'hypers_tuning\'')
@@ -227,7 +233,8 @@ class DeepARPredictor(sagemaker.predictor.Predictor):
         self.freq = freq
         self.prediction_length = prediction_length
 
-    def predict(self, ts, cat=None, encoding="utf-8", num_samples=100, quantiles=["0.1",'0.2','0.3','0.4',"0.5",'0.6','0.7','0.8',"0.9"]):
+    def predict(self, ts, cat=None, encoding="utf-8", num_samples=100,
+                quantiles=["0.1", '0.2', '0.3', '0.4', "0.5", '0.6', '0.7', '0.8', "0.9"]):
         """
         Requests the prediction of for the time series listed in `ts`, each with the (optional)
         corresponding category listed in `cat`.
@@ -239,7 +246,7 @@ class DeepARPredictor(sagemaker.predictor.Predictor):
         quantiles -- list of strings specifying the quantiles to compute (default: ["0.1", "0.5", "0.9"])
         Return value: list of `pandas.DataFrame` objects, each containing the predictions
         """
-        prediction_times = [x.index[-1] + datetime.timedelta(days=1) for x in ts] # set prediction starting time
+        prediction_times = [x.index[-1] + datetime.timedelta(days=1) for x in ts]  # set prediction starting time
         req = self.__encode_request(ts, cat, encoding, num_samples, quantiles)
         res = super(DeepARPredictor, self).predict(req)
         return self.__decode_response(res, prediction_times, encoding)
@@ -260,8 +267,8 @@ class DeepARPredictor(sagemaker.predictor.Predictor):
 
 
 predictor = DeepARPredictor(
-            endpoint_name=endpoint_name,
-            sagemaker_session=sagemaker_session)
+    endpoint_name=endpoint_name,
+    sagemaker_session=sagemaker_session)
 predictor.set_prediction_parameters(freq, prediction_length)
 # predictor.serializer.content_type = "application/json"
 
@@ -269,15 +276,14 @@ predictor.set_prediction_parameters(freq, prediction_length)
 list_of_df = predictor.predict(time_series_training[-4:])
 actual_data = time_series[-4:]
 for k in range(len(list_of_df)):
-    plt.figure(figsize=(12,6))
-    actual_data[k][-prediction_length-context_length:].plot(label='target')
+    plt.figure(figsize=(12, 6))
+    actual_data[k][-prediction_length - context_length:].plot(label='target')
     p10 = list_of_df[k]['0.1']
     p90 = list_of_df[k]['0.9']
     plt.fill_between(p10.index, p10, p90, color='y', alpha=0.5, label='80% confidence interval')
     list_of_df[k]['0.5'].plot(label='prediction median')
     plt.legend()
     plt.show()
-
 
 # delete endpoint machine
 sagemaker_session.delete_endpoint(endpoint_name)
