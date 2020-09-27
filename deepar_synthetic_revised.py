@@ -86,22 +86,23 @@ training_type = 'hypers_tuning'  # normal_training or hypers_tuning
 # normal training, no hypers tuning
 if training_type == 'normal_training':
     estimator = sagemaker.estimator.Estimator(
-                                            sagemaker_session=sagemaker_session,
-                                            image_uri=image_name,
-                                            role=role,
-                                            instance_count=1,
-                                            instance_type='ml.m5.xlarge',
-                                            base_job_name='DEMO-deepar-synthetic-zc',  # 不能用下划线_
-                                            output_path="s3://" + s3_output_path,
-                                            tags=[{'Key':'app', 'Value':'sagemaker-deepar-demo-test'},
-                                                  {'Key':'env', 'Value':'test'},
-                                                  {'Key':'name', 'Value':'synthetic-data'},
-                                                  {'Key':'depart', 'Value':'rd7'},
-                                                  {'Key':'manage', 'Value':'zhangchi'},
-                                                  {'Key':'input data', 'Value':'train-400.json'},
-                                                  {'Key':'instance type / workers / parallel / count', 'Value':'ml.m5.xlarge / 4 / 1 / 1'}
-                                                 ]  # tags中不能出现中英文逗号
-                                            )
+        sagemaker_session=sagemaker_session,
+        image_uri=image_name,
+        role=role,
+        instance_count=1,
+        instance_type='ml.m5.xlarge',
+        max_run=3600,
+        use_spot_instances=True,
+        max_wait=3600,  # MaxWaitTimeInSeconds(i.e. max_wait) above 3600 is not supported for the given algorithm, and It must be present and be greater than or equal to MaxRuntimeInSeconds(i.e. max_run).
+        base_job_name='DEMO-deepar-synthetic-zc',  # 不能用下划线_
+        output_path="s3://" + s3_output_path,
+        tags=[{'Key':'app', 'Value':'sagemaker-deepar-demo-test'},
+              {'Key':'env', 'Value':'test'},
+              {'Key':'name', 'Value':'synthetic-data'},
+              {'Key':'depart', 'Value':'rd7'},
+              {'Key':'manage', 'Value':'zhangchi'},
+              {'Key':'input data', 'Value':'train-400.json'},
+              {'Key':'instance type / workers / parallel / count', 'Value':'ml.m5.xlarge / 4 / 1 / 1'}])  # tags中不能出现中英文逗号
     hyperparameters = {
         "time_freq": freq,
         "context_length": str(context_length),
@@ -135,35 +136,36 @@ if training_type == 'normal_training':
 # hypers tuning
 elif training_type == 'hypers_tuning':
     estimator_hyper = sagemaker.estimator.Estimator(
-                                            sagemaker_session=sagemaker_session,
-                                            image_uri=image_name,
-                                            role=role,
-                                            instance_count=1,
-                                            instance_type='ml.m5.xlarge',
-                                            base_job_name='DEMO-deepar-synthetic-zc',
-                                            output_path="s3://" + s3_output_path,
-                                            hyperparameters = {
-                                                "time_freq": freq,
-                                                "context_length": str(context_length),
-                                                "prediction_length": str(prediction_length),
-                                                "num_cells": "40",
-                                                "num_layers": "2",
-                                                "epochs": "100",
-                                                "mini_batch_size": "32",
-                                                "learning_rate": "0.001",
-                                                "dropout_rate": "0.05",
-                                                "early_stopping_patience": "10",
-                                                'likelihood': 'gaussian'},
-                                            tags=[{'Key':'app', 'Value':'sagemaker-deepar-demo-test'},
-                                                  {'Key':'env', 'Value':'test'},
-                                                  {'Key':'name', 'Value':'synthetic-data/hyperparameters-tuning'},
-                                                  {'Key':'depart', 'Value':'rd7'},
-                                                  {'Key':'manage', 'Value':'zhangchi'},
-                                                  {'Key':'input data', 'Value':'train-400.json'},
-                                                  {'Key':'instance type / workers / parallel / count', 'Value':'ml.m5.xlarge / 4 / 1 / 1'},
-                                                  {'Key':'hypers choice', 'Value':'likelihood: deterministic-L1 / student-T'}]
-                                            # tags中不能出现中英文逗号
-                                            )
+        sagemaker_session=sagemaker_session,
+        image_uri=image_name,
+        role=role,
+        instance_count=1,
+        instance_type='ml.m5.xlarge',
+        max_run=3600,
+        use_spot_instances=True,
+        max_wait=3600,
+        base_job_name='DEMO-deepar-synthetic-zc',
+        output_path="s3://" + s3_output_path,
+        hyperparameters = {
+            "time_freq": freq,
+            "context_length": str(context_length),
+            "prediction_length": str(prediction_length),
+            "num_cells": "40",
+            "num_layers": "2",
+            "epochs": "100",
+            "mini_batch_size": "32",
+            "learning_rate": "0.001",
+            "dropout_rate": "0.05",
+            "early_stopping_patience": "10",
+            'likelihood': 'gaussian'},
+        tags=[{'Key':'app', 'Value':'sagemaker-deepar-demo-test'},
+              {'Key':'env', 'Value':'test'},
+              {'Key':'name', 'Value':'synthetic-data/hyperparameters-tuning'},
+              {'Key':'depart', 'Value':'rd7'},
+              {'Key':'manage', 'Value':'zhangchi'},
+              {'Key':'input data', 'Value':'train-400.json'},
+              {'Key':'instance type / workers / parallel / count', 'Value':'ml.m5.xlarge / 4 / 1 / 1'},
+              {'Key':'hypers choice', 'Value':'likelihood: deterministic-L1 / student-T'}])  # tags中不能出现中英文逗号
 
     hyperparameter_ranges = {'likelihood' : CategoricalParameter(["deterministic-L1",'student-T'])}
     objective_metric_name = 'test:mean_wQuantileLoss'
@@ -184,9 +186,8 @@ elif training_type == 'hypers_tuning':
                                       {'Key':'hypers choice', 'Value':'likelihood: deterministic-L1 / student-T'}]
                                )
     data_channels = {
-                    "train": "s3://{}/train/train-400.json".format(s3_data_path),
-                    "test": "s3://{}/test/test-400.json".format(s3_data_path)
-                    }
+        "train": "s3://{}/train/train-400.json".format(s3_data_path),
+        "test": "s3://{}/test/test-400.json".format(s3_data_path)}
     tuner.fit(inputs=data_channels, wait=True)
     # tuner.fit(inputs=data_channels, wait=False)
     # boto3.client('sagemaker').describe_hyper_parameter_tuning_job(
